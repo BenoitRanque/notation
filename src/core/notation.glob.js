@@ -204,7 +204,7 @@ class NotationGlob {
      */
     static isValid(glob) {
         return (typeof glob === 'string')
-            && (/^(!?([^\s.!*]+|\*)(\.([^\s.!*]+|\*))*)$/).test(glob);
+            && (/^(!?([^\s.!*\[\]]+|\*)((\.([^\s.!*\[\]]+|\*))|(\[([0-9]+|\*)\]))*)$/).test(glob);
     }
 
     /**
