@@ -49,7 +49,7 @@ class NotationGlob {
             absGlob: ng.absGlob,
             isNegated: ng.isNegated,
             regexp: NotationGlob.toRegExp(ng.absGlob),
-            levels: ng.absGlob.split('.')
+            levels: ng.absGlob.split(/\.|(?=\[)/)
         };
     }
 
@@ -235,12 +235,12 @@ class NotationGlob {
     static compare(a, b) {
         // trivial case, both are exactly the same!
         if (a === b) return 0;
-        let levelsA = a.split('.'),
-            levelsB = b.split('.');
+        let levelsA = a.split(/\.|(?=\[)/),
+            levelsB = b.split(/\.|(?=\[)/);
         // Check depth (number of levels)
         if (levelsA.length === levelsB.length) {
             // count wildcards (assuming more wildcards comes first)
-            let wild = /(?:^|\.)\*(?:$|\.)/g,
+            let wild = /(?:^|\.|\[)\*(?:$|\.|\[)/g,
                 mA = a.match(wild),
                 mB = b.match(wild),
                 wildA = mA ? mA.length : 0,
