@@ -21,16 +21,26 @@ const utils = {
     },
 
     deepCopy(object) {
-        if (!utils.isObject(object)) return object;
-        let k, o,
-            copy = {};
-        for (k in object) {
-            if (utils.hasOwn(object, k)) {
-                o = object[k];
-                copy[k] = utils.isObject(o) ? utils.deepCopy(o) : o;
+        if (utils.isArray(object)) {
+            let a, i,
+                copy = [];
+            for (i of object) {
+                copy.push(utils.deepCopy(i))
             }
+            return copy;
+        } else if (utils.isObject(object)) {
+            let k, o,
+                copy = {};
+            for (k in object) {
+                if (utils.hasOwn(object, k)) {
+                    o = object[k];
+                    copy[k] = utils.deepCopy(o);
+                }
+            }
+            return copy;
+        } else {
+            return object;
         }
-        return copy;
     },
 
     // iterates over elements of an array, executing the callback for each
