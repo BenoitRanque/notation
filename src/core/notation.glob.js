@@ -49,7 +49,7 @@ class NotationGlob {
             absGlob: ng.absGlob,
             isNegated: ng.isNegated,
             regexp: NotationGlob.toRegExp(ng.absGlob),
-            levels: ng.absGlob.split('.')
+            levels: ng.absGlob.split(/\.|(?=\[)/)
         };
     }
 
@@ -172,7 +172,7 @@ class NotationGlob {
         if (glob.indexOf('!') === 0) glob = glob.slice(1);
         // Modified from http://stackoverflow.com/a/13818704/112731
         glob = utils.pregQuote(glob)
-            .replace(/\\\*/g, '[^\\s\\.]*')
+            .replace(/\\\*/g, '[^\\s\\.\\[\\]]*')
             .replace(/\\\?/g, '.');
         return new RegExp('^' + glob + '(\\..+|$)');
         // it should either end ($) or continue with a dot. So for example,
@@ -204,7 +204,7 @@ class NotationGlob {
      */
     static isValid(glob) {
         return (typeof glob === 'string')
-            && (/^(!?([^\s.!*]+|\*)(\.([^\s.!*]+|\*))*)$/).test(glob);
+            && (/^(!?([^\s.!*\[\]]+|\*)((\.([^\s.!*\[\]]+|\*))|(\[([0-9]+|\*)\]))*)$/).test(glob);
     }
 
     /**
@@ -235,12 +235,12 @@ class NotationGlob {
     static compare(a, b) {
         // trivial case, both are exactly the same!
         if (a === b) return 0;
-        let levelsA = a.split('.'),
-            levelsB = b.split('.');
+        let levelsA = a.split(/\.|(?=\[)/),
+            levelsB = b.split(/\.|(?=\[)/);
         // Check depth (number of levels)
         if (levelsA.length === levelsB.length) {
             // count wildcards (assuming more wildcards comes first)
-            let wild = /(?:^|\.)\*(?:$|\.)/g,
+            let wild = /(?:^|\.)\*(?:$|\.)|\[\*\]/g,
                 mA = a.match(wild),
                 mB = b.match(wild),
                 wildA = mA ? mA.length : 0,
