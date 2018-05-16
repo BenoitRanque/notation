@@ -240,7 +240,11 @@ class NotationGlob {
         // Check depth (number of levels)
         if (levelsA.length === levelsB.length) {
             // count wildcards (assuming more wildcards comes first)
+<<<<<<< HEAD
             let wild = /(?:^|\.)\*(?:$|\.)|\[\*\]/g,
+=======
+            let wild = /(?:^|\.|\[)\*(?:$|\.|\[)/g,
+>>>>>>> 6681a99eabb8213eb3f5eb768f62525326cb3649
                 mA = a.match(wild),
                 mB = b.match(wild),
                 wildA = mA ? mA.length : 0,
