@@ -34,6 +34,23 @@ let o = {
             id: 33,
             taxNo: 12345
         },
+        employees: [
+            {
+                name: 'jon',
+                age: 24,
+                email: 'jon@mail.com'
+            },
+            {
+                name: 'joe',
+                age: 32,
+                email: 'joe@mail.com'
+            },
+            {
+                name: 'james',
+                age: 27,
+                email: 'james@mail.com'
+            }
+        ],
         limited: true,
         notDefined: undefined,
         nuller: null,
@@ -58,6 +75,16 @@ describe('Test Suite: Notation.Glob', () => {
     const normalize = Notation.Glob.normalize;
 
     it('should validate notation glob', () => {
+        expect(valid('prop.arr[*]')).toEqual(true)
+        expect(valid('prop.arr[*].last')).toEqual(true)
+        expect(valid('prop.arr[23].last')).toEqual(true)
+        expect(valid('prop[23].last')).toEqual(true)
+        expect(valid('[23].last')).toEqual(false)
+        expect(valid('[23]')).toEqual(false)
+        expect(valid('[*]')).toEqual(false)
+        expect(valid('prop[2].')).toEqual(false)
+        expect(valid('prop[2].*')).toEqual(true)
+        expect(valid('prop[*].mid.*')).toEqual(true)
         expect(valid('prop.mid.last')).toEqual(true);
         expect(valid('prop.*.')).toEqual(false);
         expect(valid('prop.*')).toEqual(true);
@@ -100,7 +127,12 @@ describe('Test Suite: Notation.Glob', () => {
             'prop.*',
             '!prop.*.name',
             '!foo.*.boo',
-            'foo.qux.*'
+            'foo.qux.*',
+            '*.employees[*]',
+            '*.employees[1]',
+            '*.employees[*].*',
+            '!company.employees[*].age',
+            '!company.employees[2].name',
         ];
 
         //  '!foo.*.boo'    vs 'foo.qux.*'  => '!foo.*.boo', 'foo.qux.*'
@@ -132,6 +164,11 @@ describe('Test Suite: Notation.Glob', () => {
             expect(indexOf('*.*.credit')).toBeLessThan(indexOf('bill.account.credit'));
             expect(indexOf('prop.*')).toBeLessThan(indexOf('prop.id'));
             expect(indexOf('prop.*')).toBeLessThan(indexOf('!prop.*.name'));
+
+            expect(indexOf('*.employees[*]')).toBeLessThan(indexOf('*.employees[1]'));
+            expect(indexOf('*.employees[1]')).toBeLessThan(indexOf('*.employees[*].*'));
+            expect(indexOf('*.employees[*].*')).toBeLessThan(indexOf('!company.employees[*].age'));
+            expect(indexOf('!company.employees[*].age')).toBeLessThan(indexOf('!company.employees[2].name'));
         }
         // console.log(shuffled);
     });
@@ -191,7 +228,7 @@ describe('Test Suite: Notation.Glob', () => {
         // var glob = Notation.Glob.create;
         const nota = new Notation(_.cloneDeep(o));
         // console.log('value ---:', nota.value);
-        const globs = ['!company.limited', 'billing.account.credit', 'company.*', 'account.id'],
+        const globs = ['!company.limited', 'billing.account.credit', 'company.*', 'account.id', '!*.employees[*].age', 'company.employees[*].name', 'company.employees[0].*'],
             filtered = nota.filter(globs).value;
         // console.log('filtered ---:', filtered);
 
@@ -201,6 +238,10 @@ describe('Test Suite: Notation.Glob', () => {
         expect(filtered.account.id).toBeDefined();
         expect(filtered.account.likes).toBeUndefined();
         expect(filtered.billing.account.credit).toBeDefined();
+        expect(filtered.company.employees[0].name).toBeDefined()
+        expect(filtered.company.employees[0].email).toBeDefined()
+        expect(filtered.company.employees[0].age).toBeUndefined()
+        expect(filtered.company.employees[1].name).toBeUndefined()
 
         // original object should not be modied
         expect(o.company.name).toBeDefined();
