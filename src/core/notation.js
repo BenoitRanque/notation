@@ -38,7 +38,7 @@ class Notation {
      */
     constructor(object = {}) {
         // if defined, it should be an object.
-        if (!utils.isObject(object)) {
+        if (!utils.isObject(object) && !utils.isArray(object)) {
             throw new NotationError(ERR.SOURCE);
         }
         this._source = object;
@@ -92,22 +92,40 @@ class Notation {
      *  // "car.year"  1970
      */
     each(callback) {
-        let o = this._source,
-            keys = Object.keys(o);
-        utils.each(keys, (key, index, list) => {
-            // this is preserved in arrow functions
-            let prop = o[key],
-                N;
-            if (utils.isObject(prop)) {
-                N = new Notation(prop);
-                N.each((notation, nKey, value, prop) => {
-                    let subKey = key + '.' + notation;
-                    callback.call(N, subKey, nKey, value, o);
-                });
-            } else {
-                callback.call(this, key, key, prop, o);
-            }
-        });
+        let o = this._source;
+        if (utils.isArray(o)) {
+            utils.each(o, (key, index, list) => {
+                // this is preserved in arrow functions
+                let prop = key,
+                    N;
+                if (utils.isObject(prop)) {
+                    N = new Notation(prop);
+                    N.each((notation, nKey, value, prop) => {
+                        let subKey = key + notation;
+                        callback.call(N, subKey, nKey, value, o);
+                    });
+                } else {
+                    callback.call(this, key, key, prop, o);
+                }
+            });
+        } else {
+            let keys = Object.keys(o);
+            utils.each(keys, (key, index, list) => {
+                // this is preserved in arrow functions
+                let prop = o[key],
+                    N;
+                if (utils.isObject(prop)) {
+                    N = new Notation(prop);
+                    N.each((notation, nKey, value, prop) => {
+                        let subKey = key + '.' + notation;
+                        callback.call(N, subKey, nKey, value, o);
+                    });
+                } else {
+                    callback.call(this, key, key, prop, o);
+                }
+            });
+        }
+
     }
     /**
      *  Alias for `#each`
@@ -238,6 +256,7 @@ class Notation {
         let level = this._source,
             result = { has: false, value: undefined };
         Notation.eachNote(notation, (levelNotation, note, index, list) => {
+            debugger
             if (utils.hasOwn(level, note)) {
                 level = level[note];
                 result = { has: true, value: level };
@@ -285,7 +304,7 @@ class Notation {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
         let o, lastNote;
-        if (notation.indexOf('.') < 0) {
+        if (notation.match(/\.|\[/) < 0) {
             lastNote = notation;
             o = this._source;
         } else {
@@ -551,29 +570,42 @@ class Notation {
             filtered = new Notation({});
         }
 
-        let g, endStar, normalized;
+        let g, endStar, endArrStar, normalized;
         // iterate through globs
         utils.each(globs, (globNotation, index, array) => {
             // console.log('--->', globNotation);
             g = new NotationGlob(globNotation);
             // set flag that indicates whether the glob ends with `.*`
             endStar = g.absGlob.slice(-2) === '.*';
+            // set flag that indicates whether the glob ends with `[*]`
+            endArrStar = g.absGlob.slice(-3) === '[*]';
             // get the remaining part as the (extra) normalized glob
-            normalized = endStar ? g.absGlob.slice(0, -2) : g.absGlob;
+            // remove either `.*` or `[*]` if present at end of glob string
+            normalized = g.absGlob.replace(/(\.\*$)|(\[\*]$)/, '');
+            // normalized = endStar ? g.absGlob.slice(0, -2) : endArrStar ?  g.absGlob.slice(0, -3) : g.absGlob;
             // normalized = endStar ? g.absGlob.replace(/(\.\*)+$/, '') : g.absGlob;
             // check if normalized glob has no wildcard stars e.g. "a.b" or
             // "!a.b.c" etc..
             if (normalized.indexOf('*') < 0) {
                 if (g.isNegated) {
                     // directly remove the notation if negated
+                    debugger
                     filtered.remove(normalized);
-                    // if original glob had `.*` at the end, it means remove
-                    // contents (not itself). so we'll set an empty object.
+                    // if original glob had `.*` or `[*]` at the end, it means remove
+                    // contents (not itself). so we'll set an empty object/array.
                     // meaning `some.prop` (prop) is removed completely but
-                    // `some.prop.*` (prop) results in `{}`.
-                    if (endStar) filtered.set(normalized, {}, true);
+                    // `some.prop.*` (prop) results in `{}`
+                    // and `some.prop[*]` results in `[]`.
+                    if (endStar) {
+                        debugger
+                        filtered.set(normalized, {}, true);
+                    } else if (endArrStar) {
+                        debugger
+                        filtered.set(normalized, [], true);
+                    }
                 } else {
                     // directly copy the same notation from the original
+                    debugger
                     filtered.copyFrom(original, normalized, null, true);
                 }
                 // move to the next
@@ -593,6 +625,7 @@ class Notation {
                 // note1.note2.note3 is iterated from left to right, as:
                 // 'note1', 'note1.note2', 'note1.note2.note3' — in order.
                 Notation.eachNote(originalNotation, (levelNotation, note, index, list) => {
+                    debugger
                     if (g.test(levelNotation)) {
                         if (g.isNegated) {
                             // console.log('removing', levelNotation, 'of', originalNotation);
@@ -1019,8 +1052,8 @@ class Notation {
         if (!Notation.isValid(notation)) {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
-        return notation.indexOf('.') >= 0
-            ? notation.replace(/\.[^.]*$/, '')
+        return notation.match(/\.|\[/) >= 0
+            ? notation.replace(/(\.|.\[)[^.[]*$/, '')
             : null;
     }
 
@@ -1054,7 +1087,12 @@ class Notation {
             levelNotation;
         utils.each(notes, (note, index, list) => {
             levelNotes.push(note);
+            // if note is array note eg. `[*]` or `[2]`
+            if (note.match(/\[([0-9]+|\*)]/)) {
+                levelNotation = levelNotes.join('');
+            } else {
             levelNotation = levelNotes.join('.');
+            }
             if (callback(levelNotation, note, index, notes) === false) return false;
         }, Notation);
     }

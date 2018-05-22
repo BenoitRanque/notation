@@ -20,6 +20,16 @@ let o = {
             balance: -293
         }
     },
+    hobbies: {
+        fishing: {
+            days: 'sundays',
+            location: 'river'
+        },
+        rockClimbing: {
+            days: 'saturdays',
+            location: 'mountain'
+        }
+    },
     company: {
         name: 'pilot co',
         address: {
@@ -228,7 +238,17 @@ describe('Test Suite: Notation.Glob', () => {
         // var glob = Notation.Glob.create;
         const nota = new Notation(_.cloneDeep(o));
         // console.log('value ---:', nota.value);
-        const globs = ['!company.limited', 'billing.account.credit', 'company.*', 'account.id', '!*.employees[*].age', 'company.employees[*].name', 'company.employees[0].*'],
+        debugger
+        const globs = [
+            '!company.limited',
+            'billing.account.credit',
+            'company.*',
+            'account.id',
+            'hobbies.*.days',
+            '!*.employees[*].age',
+            'company.employees[*].name',
+            'company.employees[0].*'
+        ],
             filtered = nota.filter(globs).value;
         // console.log('filtered ---:', filtered);
 
@@ -238,10 +258,13 @@ describe('Test Suite: Notation.Glob', () => {
         expect(filtered.account.id).toBeDefined();
         expect(filtered.account.likes).toBeUndefined();
         expect(filtered.billing.account.credit).toBeDefined();
+        expect(filtered.hobbies.fishing.days).toBeDefined()
+        expect(filtered.hobbies.fishing.location).toBeUndefined()
         expect(filtered.company.employees[0].name).toBeDefined()
         expect(filtered.company.employees[0].email).toBeDefined()
         expect(filtered.company.employees[0].age).toBeUndefined()
         expect(filtered.company.employees[1].name).toBeUndefined()
+        console.log(filtered.company.employees)
 
         // original object should not be modied
         expect(o.company.name).toBeDefined();
