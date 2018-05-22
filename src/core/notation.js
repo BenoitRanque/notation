@@ -519,175 +519,100 @@ class Notation {
      */
     filter(globNotations) {
         let original = this.value;
-        let inputData = utils.deepCopy(this.value);
+        let copy = utils.deepCopy(original);
 
         // ensure array, normalize and sort the globs in logical order. we also
         // concat the array first (to prevent mutating the original) bec. we'll
         // change it's content via `.shift()`
         let globs = NotationGlob.normalize(globNotations).concat();
 
-        globs.forEach(glob => {
-            filterGlob(inputData, outputData, glob)
-        })
+        // if globs only consist of "*"; set the "copy" as source and return.
+        if (utils.stringOrArrayOf(globs, '*')) {
+            this._source = copy;
+            return this;
+        }
+        // if globs is "" or [""] set source to `{}` and return.
+        if (arguments.length === 0
+                || utils.stringOrArrayOf(globs, '')
+                || utils.stringOrArrayOf(globs, '!*')) {
+            this._source = {};
+            return this;
+        }
 
-        console.log('globs')
-        console.log(globNotations)
-        console.log(globs)
-        console.log('input')
-        console.log(inputData)
-        console.log('output')
-        console.log(outputData)
-        this._source = outputData;
+        let filtered;
+        // if the first item of sorted globs is "*" we set the source to the
+        // (full) "copy" and remove the "*" from globs (not to re-process).
+        if (globs[0] === '*') {
+            filtered = new Notation(copy);
+            globs.shift();
+        } else {
+            // otherwise we set an empty object as the source so that we can
+            // add notations/properties to it.
+            filtered = new Notation({});
+        }
+
+        let g, endStar, normalized;
+        // iterate through globs
+        utils.each(globs, (globNotation, index, array) => {
+            // console.log('--->', globNotation);
+            g = new NotationGlob(globNotation);
+            // set flag that indicates whether the glob ends with `.*`
+            endStar = g.absGlob.slice(-2) === '.*';
+            // get the remaining part as the (extra) normalized glob
+            normalized = endStar ? g.absGlob.slice(0, -2) : g.absGlob;
+            // normalized = endStar ? g.absGlob.replace(/(\.\*)+$/, '') : g.absGlob;
+            // check if normalized glob has no wildcard stars e.g. "a.b" or
+            // "!a.b.c" etc..
+            if (normalized.indexOf('*') < 0) {
+                if (g.isNegated) {
+                    // directly remove the notation if negated
+                    filtered.remove(normalized);
+                    // if original glob had `.*` at the end, it means remove
+                    // contents (not itself). so we'll set an empty object.
+                    // meaning `some.prop` (prop) is removed completely but
+                    // `some.prop.*` (prop) results in `{}`.
+                    if (endStar) filtered.set(normalized, {}, true);
+                } else {
+                    // directly copy the same notation from the original
+                    filtered.copyFrom(original, normalized, null, true);
+                }
+                // move to the next
+                return true;
+            }
+            // if glob has wildcard star(s), we'll iterate through keys of the
+            // source object and see if (full) notation of each key matches
+            // the current glob.
+
+            // TODO: Optimize the loop below. Instead of checking each key's
+            // notation, get the non-star left part of the glob and iterate
+            // that property of the source object.
+            this.each((originalNotation, key, value, obj) => {
+                // console.log('>>', originalNotation);
+
+                // iterating each note of original notation. i.e.:
+                // note1.note2.note3 is iterated from left to right, as:
+                // 'note1', 'note1.note2', 'note1.note2.note3' — in order.
+                Notation.eachNote(originalNotation, (levelNotation, note, index, list) => {
+                    if (g.test(levelNotation)) {
+                        if (g.isNegated) {
+                            // console.log('removing', levelNotation, 'of', originalNotation);
+                            filtered.remove(levelNotation);
+                            // we break and return early if removed bec. deeper
+                            // level props are also removed with this parent.
+                            // e.g. when 'note1.note2' of 'note1.note2.note3' is
+                            // removed, we no more have 'note3'.
+                            return false;
+                        }
+                        filtered.set(levelNotation, value, true);
+                    }
+                });
+            });
+        });
+        // finally set the filtered's value as the source of our instance and
+        // return.
+        this._source = filtered.value;
         return this;
-
-
-        function filterGlob(inputData, outputData, glob) {
-            let negated = glob.indexOf('!') === 0;
-    
-            if (negated) {
-                glob = glob.slice(1);
-            }
-    
-            let globSegments = glob.split(/\.|(?=\[)/)
-            
-            filterGlobSegment(inputData, outputData, globSegments, negated)
-        }
-
-        function filterGlobSegment(inputData, outputData, globSegments, negated) {
-            
-            if (inputData === undefined) return
-            if (!outputData) {
-                if (utils.isObject(inputData)) outputData = {}
-                if (utils.isArray(inputData)) outputData = []
-            }
-            
-            // remove first globSegment and test against it
-            let globSegment = globSegments.shift()
-
-            if (globSegment.match(/^\*$/)) {
-                // wildcard object property
-                Object.keys(inputData).forEach(key => {
-                    filterGlobSegmentMember(inputData, outputData, key, globSegments, negated)
-                })
-            } else if (globSegment.match(/^\[\*]^$/)) {
-                // array wildcard
-                inputData.forEach((item, index) => {
-                    filterGlobSegmentMember(inputData, outputData, index, globSegments, negated)
-                })
-            } else if (globSegment.match(/^\[[0-9]*]$/)) {
-                let index = Number(globSegment.match(/[0-9]/))
-                filterGlobSegmentMember(inputData, outputData, index, globSegments, negated)
-            } else {
-                let key = globSegment
-                filterGlobSegmentMember(inputData, outputData, key, globSegments, negated)
-            }
-        }
-        
-        function filterGlobSegmentMember(inputData, outputData, keyIndex, globSegments, negated) {
-            if (globSegments.length > 0) {
-                negated ? delete outputData[keyIndex] : outputData[keyIndex] = inputData[keyIndex]
-            } else {
-                filterGlobSegment(inputData[keyIndex], outputData[keyIndex], globSegments, negated)
-            }
-        }
     }
-
-    // filter(globNotations) {
-    //     let original = this.value;
-    //     let copy = utils.deepCopy(original);
-
-    //     // ensure array, normalize and sort the globs in logical order. we also
-    //     // concat the array first (to prevent mutating the original) bec. we'll
-    //     // change it's content via `.shift()`
-    //     let globs = NotationGlob.normalize(globNotations).concat();
-
-    //     // if globs only consist of "*"; set the "copy" as source and return.
-    //     if (utils.stringOrArrayOf(globs, '*')) {
-    //         this._source = copy;
-    //         return this;
-    //     }
-    //     // if globs is "" or [""] set source to `{}` and return.
-    //     if (arguments.length === 0
-    //             || utils.stringOrArrayOf(globs, '')
-    //             || utils.stringOrArrayOf(globs, '!*')) {
-    //         this._source = {};
-    //         return this;
-    //     }
-
-    //     let filtered;
-    //     // if the first item of sorted globs is "*" we set the source to the
-    //     // (full) "copy" and remove the "*" from globs (not to re-process).
-    //     if (globs[0] === '*') {
-    //         filtered = new Notation(copy);
-    //         globs.shift();
-    //     } else {
-    //         // otherwise we set an empty object as the source so that we can
-    //         // add notations/properties to it.
-    //         filtered = new Notation({});
-    //     }
-
-    //     let g, endStar, normalized;
-    //     // iterate through globs
-    //     utils.each(globs, (globNotation, index, array) => {
-    //         // console.log('--->', globNotation);
-    //         g = new NotationGlob(globNotation);
-    //         // set flag that indicates whether the glob ends with `.*`
-    //         endStar = g.absGlob.slice(-2) === '.*';
-    //         // get the remaining part as the (extra) normalized glob
-    //         normalized = endStar ? g.absGlob.slice(0, -2) : g.absGlob;
-    //         // normalized = endStar ? g.absGlob.replace(/(\.\*)+$/, '') : g.absGlob;
-    //         // check if normalized glob has no wildcard stars e.g. "a.b" or
-    //         // "!a.b.c" etc..
-    //         if (normalized.indexOf('*') < 0) {
-    //             if (g.isNegated) {
-    //                 // directly remove the notation if negated
-    //                 filtered.remove(normalized);
-    //                 // if original glob had `.*` at the end, it means remove
-    //                 // contents (not itself). so we'll set an empty object.
-    //                 // meaning `some.prop` (prop) is removed completely but
-    //                 // `some.prop.*` (prop) results in `{}`.
-    //                 if (endStar) filtered.set(normalized, {}, true);
-    //             } else {
-    //                 // directly copy the same notation from the original
-    //                 filtered.copyFrom(original, normalized, null, true);
-    //             }
-    //             // move to the next
-    //             return true;
-    //         }
-    //         // if glob has wildcard star(s), we'll iterate through keys of the
-    //         // source object and see if (full) notation of each key matches
-    //         // the current glob.
-
-    //         // TODO: Optimize the loop below. Instead of checking each key's
-    //         // notation, get the non-star left part of the glob and iterate
-    //         // that property of the source object.
-    //         this.each((originalNotation, key, value, obj) => {
-    //             // console.log('>>', originalNotation);
-
-    //             // iterating each note of original notation. i.e.:
-    //             // note1.note2.note3 is iterated from left to right, as:
-    //             // 'note1', 'note1.note2', 'note1.note2.note3' — in order.
-    //             Notation.eachNote(originalNotation, (levelNotation, note, index, list) => {
-    //                 if (g.test(levelNotation)) {
-    //                     if (g.isNegated) {
-    //                         // console.log('removing', levelNotation, 'of', originalNotation);
-    //                         filtered.remove(levelNotation);
-    //                         // we break and return early if removed bec. deeper
-    //                         // level props are also removed with this parent.
-    //                         // e.g. when 'note1.note2' of 'note1.note2.note3' is
-    //                         // removed, we no more have 'note3'.
-    //                         return false;
-    //                     }
-    //                     filtered.set(levelNotation, value, true);
-    //                 }
-    //             });
-    //         });
-    //     });
-    //     // finally set the filtered's value as the source of our instance and
-    //     // return.
-    //     this._source = filtered.value;
-    //     return this;
-    // }
 
     /**
      *  Removes the property from the source object, at the given notation.
@@ -1017,7 +942,7 @@ class Notation {
      */
     static isValid(notation) {
         return (typeof notation === 'string') &&
-            (/^[^\s.!]+(\.[^\s.!]+)*$/).test(notation);
+            (/^[^\s.!]+((\.[^\s.!]+)|(\[([0-9]+|\*)\]))*$/).test(notation);
     }
 
     /**
@@ -1032,7 +957,7 @@ class Notation {
         if (!Notation.isValid(notation)) {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
-        return notation.split('.').length;
+        return notation.split(/\.|(?=\[)/).length;
     }
     /**
      *  Alias of `Notation.countNotes`.
@@ -1057,7 +982,7 @@ class Notation {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
         // return notation.replace(/.*\.([^\.]*$)/, '$1');
-        return notation.split('.')[0];
+        return notation.split(/\.|(?=\[)/)[0];
     }
 
     /**
@@ -1075,7 +1000,7 @@ class Notation {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
         // return notation.replace(/.*\.([^\.]*$)/, '$1');
-        return notation.split('.').reverse()[0];
+        return notation.split(/\.|(?=\[)/).reverse()[0];
     }
 
     /**
@@ -1124,7 +1049,7 @@ class Notation {
         if (!Notation.isValid(notation)) {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
-        let notes = notation.split('.'),
+        let notes = notation.split(/\.|(?=\[)/),
             levelNotes = [],
             levelNotation;
         utils.each(notes, (note, index, list) => {
