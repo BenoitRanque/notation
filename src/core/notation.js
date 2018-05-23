@@ -37,7 +37,7 @@ class Notation {
      *  notation.get('car.model'); // "Charger"
      */
     constructor(object = {}) {
-        // if defined, it should be an object.
+        // if defined, it should be an object or an array.
         if (!utils.isObject(object) && !utils.isArray(object)) {
             throw new NotationError(ERR.SOURCE);
         }
@@ -92,40 +92,27 @@ class Notation {
      *  // "car.year"  1970
      */
     each(callback) {
+        let isArray = utils.isArray(this._source)
         let o = this._source;
-        if (utils.isArray(o)) {
-            utils.each(o, (key, index, list) => {
-                // this is preserved in arrow functions
-                let prop = key,
-                    N;
-                if (utils.isObject(prop)) {
-                    N = new Notation(prop);
-                    N.each((notation, nKey, value, prop) => {
-                        let subKey = key + notation;
-                        callback.call(N, subKey, nKey, value, o);
-                    });
-                } else {
-                    callback.call(this, key, key, prop, o);
-                }
-            });
-        } else {
-            let keys = Object.keys(o);
-            utils.each(keys, (key, index, list) => {
-                // this is preserved in arrow functions
-                let prop = o[key],
-                    N;
-                if (utils.isObject(prop)) {
-                    N = new Notation(prop);
-                    N.each((notation, nKey, value, prop) => {
-                        let subKey = key + '.' + notation;
-                        callback.call(N, subKey, nKey, value, o);
-                    });
-                } else {
-                    callback.call(this, key, key, prop, o);
-                }
-            });
-        }
-
+        let keys = isArray ? o : Object.keys(o);
+        utils.each(keys, (key, index, list) => {
+            
+            // this is preserved in arrow functions
+            let prop = isArray ? key : o[key],
+                keyglob = isArray ? '[' + index + ']' : key,
+                N;
+            if (utils.isObject(prop) || utils.isArray(prop)) {
+                N = new Notation(prop);
+                N.each((notation, nKey, value, prop) => {
+                    let subKey = utils.isArray(prop)
+                    ? keyglob + notation
+                    : keyglob + '.' + notation;
+                    callback.call(N, subKey, nKey, value, o);
+                });
+            } else {
+                callback.call(this, keyglob, keyglob, prop, o);
+            }
+        });
     }
     /**
      *  Alias for `#each`
@@ -256,8 +243,12 @@ class Notation {
         let level = this._source,
             result = { has: false, value: undefined };
         Notation.eachNote(notation, (levelNotation, note, index, list) => {
-            debugger
-            if (utils.hasOwn(level, note)) {
+
+            let isArray = note.match(/\[/)
+
+            if (isArray) note = Number(note.match(/[0-9]/))
+
+            if (isArray ? utils.hasMember(level, note) : utils.hasOwn(level, note)) {
                 level = level[note];
                 result = { has: true, value: level };
             } else {
@@ -304,16 +295,21 @@ class Notation {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
         let o, lastNote;
-        if (notation.match(/\.|\[/) < 0) {
+        if (notation.match(/\.|\[/) === null) {
             lastNote = notation;
             o = this._source;
         } else {
             let upToLast = Notation.parent(notation);
             lastNote = Notation.last(notation);
+            debugger
             o = this.inspect(upToLast).value;
         }
-        let result;
-        if (utils.hasOwn(o, lastNote)) {
+        let result,
+            isArray = utils.isArray(o);
+
+        if (isArray) lastNote = Number(lastNote.match(/[0-9]+/))
+
+        if (isArray ? utils.hasMember(o, lastNote) : utils.hasOwn(o, lastNote)) {
             result = { has: true, value: o[lastNote] };
             delete o[lastNote];
         } else {
@@ -410,11 +406,23 @@ class Notation {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
         let level = this._source,
-            last;
+            last,
+            isArray,
+            isArrayMember;
         Notation.eachNote(notation, (levelNotation, note, index, list) => {
+            // check next note to see if this level is an array.
+            isArray = list[index + 1] && list[index + 1].match(/\[([0-9]+|\*)]/) !== null;
+            // check note to see if this is an array member.
+            isArrayMember = levelNotation.match(/\[([0-9]+|\*)]/) !== null;
+
             last = index === list.length - 1;
+
+            if (isArrayMember) {
+                // if array note, make it numerical
+                note = Number(levelNotation.match(/[0-9]+/))
+            }
             // check if the property is at this level
-            if (utils.hasOwn(level, note)) {
+            if ((isArrayMember && utils.hasMember(level, note)) || utils.hasOwn(level, note)) {
                 // check if we're at the last level
                 if (last) {
                     // if overwrite is set, assign the value.
@@ -427,7 +435,7 @@ class Notation {
                 // we don't have this property at this level
                 // so; if this is the last level, we set the value
                 // if not, we set an empty object for the next level
-                level = level[note] = (last ? value : {});
+                level = level[note] = (last ? value : isArray ? [] : {});
             }
         });
         return this;
@@ -544,7 +552,6 @@ class Notation {
         // concat the array first (to prevent mutating the original) bec. we'll
         // change it's content via `.shift()`
         let globs = NotationGlob.normalize(globNotations).concat();
-
         // if globs only consist of "*"; set the "copy" as source and return.
         if (utils.stringOrArrayOf(globs, '*')) {
             this._source = copy;
@@ -589,7 +596,6 @@ class Notation {
             if (normalized.indexOf('*') < 0) {
                 if (g.isNegated) {
                     // directly remove the notation if negated
-                    debugger
                     filtered.remove(normalized);
                     // if original glob had `.*` or `[*]` at the end, it means remove
                     // contents (not itself). so we'll set an empty object/array.
@@ -597,15 +603,12 @@ class Notation {
                     // `some.prop.*` (prop) results in `{}`
                     // and `some.prop[*]` results in `[]`.
                     if (endStar) {
-                        debugger
                         filtered.set(normalized, {}, true);
                     } else if (endArrStar) {
-                        debugger
                         filtered.set(normalized, [], true);
                     }
                 } else {
                     // directly copy the same notation from the original
-                    debugger
                     filtered.copyFrom(original, normalized, null, true);
                 }
                 // move to the next
@@ -625,8 +628,9 @@ class Notation {
                 // note1.note2.note3 is iterated from left to right, as:
                 // 'note1', 'note1.note2', 'note1.note2.note3' — in order.
                 Notation.eachNote(originalNotation, (levelNotation, note, index, list) => {
-                    debugger
                     if (g.test(levelNotation)) {
+                        debugger
+
                         if (g.isNegated) {
                             // console.log('removing', levelNotation, 'of', originalNotation);
                             filtered.remove(levelNotation);
@@ -1052,7 +1056,7 @@ class Notation {
         if (!Notation.isValid(notation)) {
             throw new NotationError(ERR.NOTATION + '`' + notation + '`');
         }
-        return notation.match(/\.|\[/) >= 0
+        return notation.match(/\.|\[/) !== null
             ? notation.replace(/(\.|.\[)[^.[]*$/, '')
             : null;
     }
@@ -1087,12 +1091,9 @@ class Notation {
             levelNotation;
         utils.each(notes, (note, index, list) => {
             levelNotes.push(note);
-            // if note is array note eg. `[*]` or `[2]`
-            if (note.match(/\[([0-9]+|\*)]/)) {
-                levelNotation = levelNotes.join('');
-            } else {
-            levelNotation = levelNotes.join('.');
-            }
+
+            levelNotation = levelNotes.join('.').replace(/\.\[/, '[');
+
             if (callback(levelNotation, note, index, notes) === false) return false;
         }, Notation);
     }

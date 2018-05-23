@@ -1,5 +1,6 @@
 
 let toString = Object.prototype.toString;
+let isArray = Array.isArray;
 
 const utils = {
 
@@ -7,8 +8,8 @@ const utils = {
         return toString.call(o) === '[object Object]';
     },
 
-    isArray(o) {
-        return toString.call(o) === '[object Array]';
+    isArray(a) {
+        return isArray(a);
     },
 
     ensureArray(o) {
@@ -18,6 +19,10 @@ const utils = {
 
     hasOwn(o, prop) {
         return o && typeof o.hasOwnProperty === 'function' && o.hasOwnProperty(prop);
+    },
+
+    hasMember(a, index) {
+        return a && a[index] !== undefined
     },
 
     deepCopy(object) {

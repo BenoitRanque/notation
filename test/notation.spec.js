@@ -245,9 +245,8 @@ describe('Test Suite: Notation.Glob', () => {
             'company.*',
             'account.id',
             'hobbies.*.days',
-            '!*.employees[*].age',
-            'company.employees[*].name',
-            'company.employees[0].*'
+            '!company.employees[*].age',
+            '!company.employees[1].name'
         ],
             filtered = nota.filter(globs).value;
         // console.log('filtered ---:', filtered);
@@ -264,7 +263,6 @@ describe('Test Suite: Notation.Glob', () => {
         expect(filtered.company.employees[0].email).toBeDefined()
         expect(filtered.company.employees[0].age).toBeUndefined()
         expect(filtered.company.employees[1].name).toBeUndefined()
-        console.log(filtered.company.employees)
 
         // original object should not be modied
         expect(o.company.name).toBeDefined();
@@ -295,6 +293,7 @@ describe('Test Suite: Notation.Glob', () => {
     });
 
     it('should `filter` notation-glob (negated object)', () => {
+        debugger
         var data = { name: 'Onur', phone: { brand: 'Apple', model: 'iPhone' }, car: { brand: 'Ford', model: 'Mustang' } },
             globs = ['*', '!phone'],
             filtered = new Notation(data).filter(globs).value;
@@ -619,14 +618,14 @@ describe('Test Suite: Notation', () => {
         // console.log(flat);
         expect(flat.name).toEqual(o.name);
         expect(flat['account.id']).toEqual(o.account.id);
-        expect(flat['account.likes'].length).toEqual(o.account.likes.length);
+        expect(flat['account.likes[0]']).toEqual(o.account.likes[0]);
         expect(flat['company.name']).toEqual(o.company.name);
         expect(flat['company.address.location.lat']).toEqual(o.company.address.location.lat);
 
         const expanded = Notation.create(flat).expand().value;
         expect(expanded.name).toEqual(o.name);
         expect(expanded.account.id).toEqual(o.account.id);
-        expect(expanded.account.likes.length).toEqual(o.account.likes.length);
+        expect(expanded.account.likes[0]).toEqual(o.account.likes[0]);
         expect(expanded.company.name).toEqual(o.company.name);
         expect(expanded.company.address.location.lat).toEqual(o.company.address.location.lat);
     });

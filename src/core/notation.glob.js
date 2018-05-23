@@ -172,7 +172,7 @@ class NotationGlob {
         if (glob.indexOf('!') === 0) glob = glob.slice(1);
         // Modified from http://stackoverflow.com/a/13818704/112731
         glob = utils.pregQuote(glob)
-            .replace(/\\\*/g, '[^\\s\\.\\[\\]]*')
+            .replace(/\\\*/g, '[^\\s\\.[\\]]+')
             .replace(/\\\?/g, '.');
         return new RegExp('^' + glob + '((\\.|\\[).+|$)');
         // it should either end ($) or continue with a dot or a square bracket. So for example,
@@ -325,6 +325,7 @@ class NotationGlob {
      *  // ['*', '!car.*', '!id', 'car.model']
      */
     static normalize(globsArray) {
+        debugger
         globsArray = utils.ensureArray(globsArray).map(item => item.trim());
         globsArray = NotationGlob.sort(globsArray);
 
@@ -406,6 +407,7 @@ class NotationGlob {
 
             if (duplicate || hasExactNegative || redundant) {
                 // remove the current (at the end)
+                debugger
                 globsArray.splice(indexA, 1);
             }
 
